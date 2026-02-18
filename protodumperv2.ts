@@ -10,7 +10,7 @@ const originalRequire = Module.prototype.require;
 // Override only the function, keeping TS happy
 (Module.prototype.require as any) = function (this: any, request: string) {
     if (request === "protobuf") {
-        return originalRequire.call(this, path.resolve(__dirname, "./Define/Net/protobuf"));
+        return originalRequire.call(this, path.resolve(__dirname, "./JavaScript/Core/Define/Net/protobuf"));
     }
     return originalRequire.call(this, request);
 };
@@ -154,7 +154,7 @@ function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
 }
 
 function getFieldTypeFromConstructorName(fieldvalue: object): string {
-    // console.log("Fieldvalue: " + fieldvalue);
+    // console.log("Fieldvalue: " + JSON.stringify(fieldvalue));
     try {
         for (const key in $root.Aki.Protocol) {
             // check if its a function
@@ -1057,9 +1057,40 @@ function dumpMessage(ProtoName:string, ProtoClass:any, oneofs:any, isNested:bool
         } catch (e) {
         }
     }
+    
+    // Step 10.11: loop with map<int64, emptyProto> values
+    for (let i = 1; i < 2000; i++) {
+        const testMessage = new ProtobufMessage();
+        let map = new Map<bigint, ProtobufMessage>();
+        map.set(10n, new ProtobufMessage());
+        testMessage.addMapField(i, map, ProtoFieldType.INT64, ProtoFieldType.MESSAGE);
+        try {
+            let protoInstance = ProtoClass.create(); // Creates an empty instance
+            var built = testMessage.build();
+            // console.log(`Base64 of built message for map<int64, emptyProto>: ${btoa(String.fromCharCode(...built))}`);
+            protoInstance = ProtoClass.decode(testMessage.build());
+            let fields = Object.keys(protoInstance);
+            fields.forEach((field) => {
+                const fieldname = `${field}`;
+                if (donefields.includes(fieldname))
+                    return;
+                const fieldvalue = JSON.stringify(protoInstance[fieldname]);
+                // console.log(`Fieldname: ${fieldname} Fieldvalue: ${fieldvalue}`);
+                // hardcoded $util.longToHash() for 10n
+                if (fieldvalue.startsWith(`{"\\n\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000":`))
+                {
+                    var firstKey = Object.keys(protoInstance[fieldname])[0];
+                    var firstValue = protoInstance[fieldname][firstKey];
+                    let messageCtorname = getFieldTypeFromConstructorName(firstValue);
+                    fieldcache.push(`map<int64, ${messageCtorname}> ${fieldname} = ${i}`);
+                    donefields.push(fieldname);
+                }
+            });
+        } catch (e) {
+        }
+    }
 
     // Step 11: loop empty messages
-
     for (let i = 1; i < 2000; i++) {
         const testMessage = new ProtobufMessage();
         const nestedMessage = new ProtobufMessage();
@@ -1082,6 +1113,7 @@ function dumpMessage(ProtoName:string, ProtoClass:any, oneofs:any, isNested:bool
         } catch (e) {
         }
     }
+
 
     let sortedcache:any = {};
     fieldcache.forEach((field) => {
@@ -1180,9 +1212,9 @@ console.log(`syntax = "proto3";\n`);
 messages.forEach((message) => {
     // log the message type using reflection
 
-    //if (message !== "Ai") { // m3s
+    if (message !== "pGd" && message !== "upc") { // m3s
         // return;
-    //}
+    }
     
     let ProtoLogType = $root.Aki.Protocol[message];
 
